@@ -23,4 +23,4 @@ For example, if `num_workers` is equal to 2, `GPU_ID` might be `(0 1)`, `(2 4)`,
 
 ## References
 * The network architecture from [@ischlag](https://github.com/ischlag/distributed-tensorflow-example). However, not exactly the same. For example, TensorFlow graph is a little bit different.
-* Some functions and ideas come from OpenAI's [universe-starter-agent](https://github.com/openai/universe-starter-agent). However, the code does not suppor GPU. 
+* Some functions and ideas come from OpenAI's [universe-starter-agent](https://github.com/openai/universe-starter-agent). However, the original code does not support GPU usage. 
