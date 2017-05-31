@@ -1,8 +1,8 @@
 #!/bin/bash
 name=sess
-num_workers=2
-num_gpus=1
-GPU_ID=(0)
+num_workers=4
+num_gpus=2
+GPU_ID=(0 1)
 
 tmux kill-session -t $name
 

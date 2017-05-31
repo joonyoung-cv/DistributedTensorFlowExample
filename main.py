@@ -57,20 +57,18 @@ def main():
     # Set GPU memory fraction.
     process_per_memory =\
             np.ceil(float(FLAGS.num_workers)/float(FLAGS.num_gpus))
-    fraction = 0.99 / process_per_memory
+    fraction = 0.9 / process_per_memory
+    print("Per-process GPU memory fraction: {}".format(fraction))
     gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=fraction)
 
     if FLAGS.job_name == 'ps':
-        config = tf.ConfigProto(device_filters=['/job:ps'])
         server = tf.train.Server(cluster, job_name='ps',
-                task_index=FLAGS.task_index, config=config)
+                task_index=FLAGS.task_index)
         while True:
             time.sleep(1000)
 
     elif FLAGS.job_name == 'worker':
-        config = tf.ConfigProto(gpu_options=gpu_options,
-                intra_op_parallelism_threads=1,
-                inter_op_parallelism_threads=2)
+        config = tf.ConfigProto(gpu_options=gpu_options)
         server = tf.train.Server(cluster, job_name='worker',
                 task_index=FLAGS.task_index, config=config)
         worker = Worker(FLAGS.job_name, FLAGS.task_index, server)

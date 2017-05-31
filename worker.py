@@ -118,7 +118,7 @@ class Worker(object):
                                  local_init_op=self.local_init_op)
 
         config = tf.ConfigProto(allow_soft_placement=True,
-                log_device_placement=True)
+                log_device_placement=False)
 
         with sv.managed_session(self.server.target, config=config) as sess, sess.as_default():
 
