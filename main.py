@@ -23,14 +23,14 @@ import signal, sys
 from worker import Worker
 from utils import *
 
-# Define flags.
 flags = tf.app.flags
 
 flags.DEFINE_string('job_name', 'ps', "Either 'ps' or 'worker'")
 flags.DEFINE_integer('task_index', 0, "Index of task within the job")
 flags.DEFINE_integer('batch_size', 100, "Batch size")
-flags.DEFINE_float('learning_rate', 0.0005, "Learning rate")
-flags.DEFINE_integer('training_epochs', 20, "Training epochs")
+flags.DEFINE_float('learning_rate', 0.001, "Learning rate")
+flags.DEFINE_integer('training_steps', 10**7,
+        "Training steps (1step = 1batch update")
 flags.DEFINE_string('logdir', './tmp/mnist/1', "Log directory")
 flags.DEFINE_integer('num_workers', 2, "Number of workers")
 flags.DEFINE_integer('num_gpus', 1,
@@ -58,7 +58,9 @@ def main():
     process_per_memory =\
             np.ceil(float(FLAGS.num_workers)/float(FLAGS.num_gpus))
     fraction = 0.9 / process_per_memory
+    print('-'*100)
     print("Per-process GPU memory fraction: {}".format(fraction))
+    print('-'*100)
     gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=fraction)
 
     if FLAGS.job_name == 'ps':

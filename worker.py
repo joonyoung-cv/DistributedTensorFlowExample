@@ -123,42 +123,37 @@ class Worker(object):
         with sv.managed_session(self.server.target, config=config) as sess, sess.as_default():
 
             begin_time = time.time()
-            frequency = 100
-            # perform training cycles
             start_time = time.time()
+            start_step = 0
 
-            epoch = 0
-            while not sv.should_stop() and epoch < FLAGS.training_epochs:
-                # number of batches in one epoch
-                batch_count = int(dataset.train.num_examples/FLAGS.batch_size)           
-                count = 0
-                for i in range(batch_count):
-                    sess.run(self.sync_op)
-                    batch_x, batch_y = dataset.train.next_batch(FLAGS.batch_size)           		
-                    
-                    # perform the operations we defined earlier on batch
-                    _, cost, summary, step = sess.run(
-                            [self.train_op, self.loss, self.summary_op, self.global_step], 
-                            feed_dict={self.x: batch_x, self.y: batch_y})
-                    self.summary_writer.add_summary(summary, step)
-                    
-                    count += 1
-                    if count % frequency == 0 or i+1 == batch_count:
-                        elapsed_time = time.time() - start_time
-                        start_time = time.time()
-                        print("Step: %d," % (step+1), 
-                                " Epoch: %2d," % (epoch+1), 
-                                " Batch: %3d of %3d," % (i+1, batch_count), 
-                                " Cost: %.4f," % cost, 
-                                " AvgTime: %3.2fms" % float(elapsed_time*1000/frequency))
-                        count = 0
-                    sess.run(self.counter_op)
+            while not sv.should_stop():
+
+                sess.run(self.sync_op)
+
+                batch_x, batch_y = dataset.train.next_batch(FLAGS.batch_size)           		
                 
-                epoch += 1          
-            
-            print("Test-Accuracy: %2.2f" % sess.run(self.accuracy, 
-                feed_dict={self.x: dataset.test.images, self.y: dataset.test.labels}))
-            print("Total Time: %3.2fs" % float(time.time() - begin_time))
-            print("Final Cost: %.4f" % cost)
-            
-            print("done")
+                _, cost, summary_str, step = sess.run(
+                        [self.train_op, self.loss, self.summary_op, self.global_step], 
+                        feed_dict={self.x: batch_x, self.y: batch_y})
+
+                self.summary_writer.add_summary(summary_str, step)
+                
+                sess.run(self.counter_op)
+
+                if step % 100 == 0 and step != 0:
+                    elapsed_time = time.time() - start_time
+                    print("step: {}\t| cost: {}\t| speed: {}step/sec".format(
+                        step, cost, float((step - start_step) / elapsed_time)))
+                    start_time = time.time()
+                    start_step = step
+               
+                if step % 10000 == 0:
+                    print("test accuracy: {}".format(
+                        sess.run(self.accuracy,
+                            {self.x: dataset.test.images, self.y: dataset.test.labels})
+                        ))
+
+                
+                        
+                if step >= FLAGS.training_steps:
+                    break
