@@ -1,17 +1,18 @@
-'''
-Distributed Tensorflow 0.8.0 example of using data parallelism and share model parameters.
+"""
+Distributed Tensorflow example
+The original code was in @ischlag.
+The code runs on TF 1.1. 
 Trains a simple sigmoid neural network on mnist for 20 epochs on three machines using one parameter server. 
+The code requires 'tmux'.
+The code runs on the local server only.
 
-Change the hardcoded host urls below with your own hosts. 
 Run like this: 
+$ bash run.sh
 
-pc-01$ python example.py --job_name="ps" --task_index=0 
-pc-02$ python example.py --job_name="worker" --task_index=0 
-pc-03$ python example.py --job_name="worker" --task_index=1 
-pc-04$ python example.py --job_name="worker" --task_index=2 
+Then, by using ctrl+b+(window number, e.g., 0, 1, 2, 3 in NumPad), 
+you can change the terminal.
 
-More details here: ischlag.github.io
-'''
+"""
 
 from __future__ import print_function
 
@@ -20,45 +21,39 @@ import sys
 import time
 
 # cluster specification
-parameter_servers = ["pc-01:2222"]
-workers = [	"pc-02:2222", 
-			"pc-03:2222",
-			"pc-04:2222"]
-cluster = tf.train.ClusterSpec({"ps":parameter_servers, "worker":workers})
+ps = ['localhost:2221', 'localhost:2222']
+worker = ['localhost:2223', 'localhost:2224']
+cluster = tf.train.ClusterSpec({'ps': ps, 'worker': worker})
 
 # input flags
-tf.app.flags.DEFINE_string("job_name", "", "Either 'ps' or 'worker'")
-tf.app.flags.DEFINE_integer("task_index", 0, "Index of task within the job")
-FLAGS = tf.app.flags.FLAGS
+flags = tf.app.flags
+flags.DEFINE_string('job_name', 'ps', "Either 'ps' or 'worker'")
+flags.DEFINE_integer('task_index', 0, "Index of task within the job")
+flags.DEFINE_integer('batch_size', 100, "Batch size")
+flags.DEFINE_float('learning_rate', 0.0005, "Learning rate")
+flags.DEFINE_integer('training_epochs', 20, "Training epochs")
+flags.DEFINE_string('logdir', './tmp/mnist/1', "Log directory")
+FLAGS = flags.FLAGS
 
 # start a server for a specific task
-server = tf.train.Server(cluster, 
-													job_name=FLAGS.job_name,
-													task_index=FLAGS.task_index)
-
-# config
-batch_size = 100
-learning_rate = 0.0005
-training_epochs = 20
-logs_path = "/tmp/mnist/1"
+server = tf.train.Server(cluster, job_name=FLAGS.job_name, task_index=FLAGS.task_index)
 
 # load mnist data set
 from tensorflow.examples.tutorials.mnist import input_data
 mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
 
-if FLAGS.job_name == "ps":
+if FLAGS.job_name == 'ps':
   server.join()
-elif FLAGS.job_name == "worker":
+elif FLAGS.job_name == 'worker':
 
 	# Between-graph replication
 	with tf.device(tf.train.replica_device_setter(
-		worker_device="/job:worker/task:%d" % FLAGS.task_index,
-		cluster=cluster)):
+		worker_device='/job:worker/task:%d' % FLAGS.task_index, cluster=cluster)):
 
 		# count the number of updates
-		global_step = tf.get_variable('global_step', [], 
-																initializer = tf.constant_initializer(0), 
-																trainable = False)
+		global_step = tf.get_variable('global_step', [],
+                initializer = tf.constant_initializer(0), 
+                trainable = False)
 
 		# input images
 		with tf.name_scope('input'):
@@ -69,17 +64,17 @@ elif FLAGS.job_name == "worker":
 
 		# model parameters will change during training so we use tf.Variable
 		tf.set_random_seed(1)
-		with tf.name_scope("weights"):
+		with tf.name_scope('weights'):
 			W1 = tf.Variable(tf.random_normal([784, 100]))
 			W2 = tf.Variable(tf.random_normal([100, 10]))
 
 		# bias
-		with tf.name_scope("biases"):
+		with tf.name_scope('biases'):
 			b1 = tf.Variable(tf.zeros([100]))
 			b2 = tf.Variable(tf.zeros([10]))
 
 		# implement model
-		with tf.name_scope("softmax"):
+		with tf.name_scope('softmax'):
 			# y is our prediction
 			z2 = tf.add(tf.matmul(x,W1),b1)
 			a2 = tf.nn.sigmoid(z2)
@@ -94,16 +89,7 @@ elif FLAGS.job_name == "worker":
 		# specify optimizer
 		with tf.name_scope('train'):
 			# optimizer is an "operation" which we can execute in a session
-			grad_op = tf.train.GradientDescentOptimizer(learning_rate)
-			'''
-			rep_op = tf.train.SyncReplicasOptimizer(grad_op, 
-																					replicas_to_aggregate=len(workers),
- 																					replica_id=FLAGS.task_index, 
- 																					total_num_replicas=len(workers),
- 																					use_locking=True
- 																					)
- 			train_op = rep_op.minimize(cross_entropy, global_step=global_step)
- 			'''
+			grad_op = tf.train.GradientDescentOptimizer(FLAGS.learning_rate)
 			train_op = grad_op.minimize(cross_entropy, global_step=global_step)
 			
 		'''
@@ -117,11 +103,11 @@ elif FLAGS.job_name == "worker":
 			accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
 		# create a summary for our cost and accuracy
-		tf.scalar_summary("cost", cross_entropy)
-		tf.scalar_summary("accuracy", accuracy)
+		tf.summary.scalar("cost", cross_entropy)
+		tf.summary.scalar("accuracy", accuracy)
 
 		# merge all summaries into a single "operation" which we can execute in a session 
-		summary_op = tf.merge_all_summaries()
+		summary_op = tf.summary.merge_all()
 		init_op = tf.initialize_all_variables()
 		print("Variables initialized ...")
 
@@ -132,25 +118,20 @@ elif FLAGS.job_name == "worker":
 	begin_time = time.time()
 	frequency = 100
 	with sv.prepare_or_wait_for_session(server.target) as sess:
-		'''
-		# is chief
-		if FLAGS.task_index == 0:
-			sv.start_queue_runners(sess, [chief_queue_runner])
-			sess.run(init_token_op)
-		'''
+
 		# create log writer object (this will log on every machine)
-		writer = tf.train.SummaryWriter(logs_path, graph=tf.get_default_graph())
+		writer = tf.summary.FileWriter(FLAGS.logdir, graph=tf.get_default_graph())
 				
 		# perform training cycles
 		start_time = time.time()
-		for epoch in range(training_epochs):
+		for epoch in range(FLAGS.training_epochs):
 
 			# number of batches in one epoch
-			batch_count = int(mnist.train.num_examples/batch_size)
+			batch_count = int(mnist.train.num_examples/FLAGS.batch_size)
 
 			count = 0
 			for i in range(batch_count):
-				batch_x, batch_y = mnist.train.next_batch(batch_size)
+				batch_x, batch_y = mnist.train.next_batch(FLAGS.batch_size)
 				
 				# perform the operations we defined earlier on batch
 				_, cost, summary, step = sess.run(
